@@ -4,6 +4,7 @@ import {
   getAllProductsService,
   getProductByCategoryService,
   getProductByIdService,
+  getProductsByPackageService,
   getProductsByTypeService,
   updateProductService,
 } from "./product.service.js";
@@ -97,6 +98,16 @@ export const getProductById = async (req, res, next) => {
     }
 
     res.status(200).json({ success: true, product });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getProductsByPackage = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const result = await getProductsByPackageService(page, limit);
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }

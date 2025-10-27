@@ -5,6 +5,7 @@ import {
   getAllProducts,
   getAllProductsbyCategory,
   getProductById,
+  getProductsByPackage,
   getProductsByTypeController,
   updateProduct,
 } from "./product.controller.js";
@@ -18,6 +19,7 @@ router.put("/update-product/:id", upload.any(), updateProduct);
 router.delete("/delete-product/:id", deleteProduct);
 router.get("/filter-product", getAllProductsbyCategory);
 router.get("/filter-type", getProductsByTypeController);
+router.get("/get-package-products", getProductsByPackage);
 router.get("/single-product/:id", getProductById)
 
 export default router;

@@ -19,6 +19,10 @@ const ProductSchema = new Schema(
       type: Number,
       required: true,
     },
+    isPackage:{
+      type: Boolean,
+      default: false,
+    },
     category: {
       type: String,
       required: true,

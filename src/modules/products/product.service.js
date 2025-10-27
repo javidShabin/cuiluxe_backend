@@ -6,7 +6,7 @@ import { validateAddProduct } from "./product.validation.js";
 // Add product service
 export const addProductService = async (data, files) => {
   validateAddProduct(data);
-  const { title, sku, price, category, types, description } = data;
+  const { title, sku, price, category, types, description, isPackage } = data;
 
   let uploadedImages = [];
 
@@ -34,6 +34,7 @@ export const addProductService = async (data, files) => {
     category,
     types,
     description,
+    isPackage: isPackage === 'true' || isPackage === true,
     images: uploadedImages,
   });
 
@@ -74,8 +75,6 @@ export const getAllProductsService = async (page = 1, limit = 20) => {
 
 // Update Product details
 export const updateProductService = async (id, data, files) => {
-  console.log("🧾 Incoming update data:", data);
-  console.log("🖼 Incoming files count:", files?.length ?? 0);
 
   const product = await Product.findById(id);
   if (!product) throw new AppError("Product not found", 404);
@@ -128,8 +127,7 @@ export const updateProductService = async (id, data, files) => {
 
   // 3) Handle image replacement logic
   if (parsedExisting.length === 0 && uploadedUrls.length === 0) {
-    // No changes to images - keep current
-    console.log("No image changes detected, keeping current images");
+   
   } else {
     // Start with current images if no existingImages provided
     if (parsedExisting.length === 0 && product.images && product.images.length > 0) {
@@ -237,6 +235,38 @@ export const getProductByIdService = async (productId) => {
   try {
     const product = await Product.findById(productId)
     return product;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getProductsByPackageService = async (page = 1, limit = 20) => {
+  try {
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const products = await Product.find({ isPackage: true })
+      .select("title images price category types sku description isPackage")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    const totalProducts = await Product.countDocuments({ isPackage: true });
+    const totalPages = Math.ceil(totalProducts / limitNum);
+
+    return {
+      products,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalProducts,
+        hasNextPage: pageNum < totalPages,
+        hasPrevPage: pageNum > 1,
+        limit: limitNum
+      }
+    };
   } catch (error) {
     throw error;
   }
