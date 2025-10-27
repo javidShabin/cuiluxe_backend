@@ -12,7 +12,6 @@ import {
 // Add product with details
 export const addProduct = async (req, res, next) => {
   try {
-    
     const result = await addProductService(req.body, req.files);
     res.status(200).json(result);
   } catch (error) {
