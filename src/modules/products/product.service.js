@@ -79,7 +79,7 @@ export const updateProductService = async (id, data, files) => {
   const product = await Product.findById(id);
   if (!product) throw new AppError("Product not found", 404);
 
-  const { title, sku, price, category, types, description, existingImages } = data;
+  const { title, sku, price, category, types, description, existingImages, isPackage } = data;
 
   if (title !== undefined) product.title = title;
   if (sku !== undefined) product.sku = sku;
@@ -87,6 +87,10 @@ export const updateProductService = async (id, data, files) => {
   if (category !== undefined) product.category = category;
   if (types !== undefined) product.types = types;
   if (description !== undefined) product.description = description;
+  if (isPackage !== undefined) {
+    // Handle boolean coming as string from multipart forms
+    product.isPackage = isPackage === 'true' || isPackage === true;
+  }
 
   // 1) Upload new files to Cloudinary
   const uploadedUrls = [];
