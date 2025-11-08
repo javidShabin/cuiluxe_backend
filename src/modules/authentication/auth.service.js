@@ -89,7 +89,7 @@ export const verifyOtpService = async (data) => {
     await newUser.save();
 
     // Step 7: Generate JWT token for the new user
-    const token = generateToken({ id: newUser.id });
+    const token = generateToken(newUser.id);
 
     // Step 8: Remove temp user after successful verification
     await TempUser.deleteOne({ email });
@@ -121,7 +121,7 @@ export const loginService = async (data) => {
     if (!isMatch) throw new AppError("Invalid password", 401);
 
     // Step 5: Generate JWT token for authenticated user
-    const token = generateToken({ id: isUser.id });
+    const token = generateToken(isUser.id);
 
     // Step 6: Return success message and token
     return { message: "User logged in successfully", token, isUser };

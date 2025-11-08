@@ -2,10 +2,14 @@ import { updatePassowrdService, updatePasswordOtpService, userProfileService } f
 
 export const getUserProfile = async (req, res, next) => {
   try {
-    const { id } = req.user;
+    // Handle both old token format { id: { id: "..." } } and new format { id: "..." }
+    let userId = req.user.id;
+    if (typeof userId === 'object' && userId !== null && userId.id) {
+      userId = userId.id;
+    }
 
     // Pass the id as an object since service expects { id }
-    const result = await userProfileService(id);
+    const result = await userProfileService({ id: userId });
 
     // Correct JSON response format
     res.status(200).json({
