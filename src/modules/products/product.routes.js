@@ -8,6 +8,7 @@ import {
   getProductsByPackage,
   getProductsByTypeController,
   updateProduct,
+  getProductMetadata,
 } from "./product.controller.js";
 import upload from "../../middlewares/multer.js";
 
@@ -20,6 +21,7 @@ router.delete("/delete-product/:id", deleteProduct);
 router.get("/filter-product", getAllProductsbyCategory);
 router.get("/filter-type", getProductsByTypeController);
 router.get("/get-package-products", getProductsByPackage);
-router.get("/single-product/:id", getProductById)
+router.get("/single-product/:id", getProductById);
+router.get("/metadata", getProductMetadata); // Optimized endpoint for types/categories
 
 export default router;

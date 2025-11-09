@@ -2,20 +2,26 @@ import cloudinary from "../../configs/cloudinary.js";
 import { AppError } from "../../utils/AppError.js";
 import SiteContent from "./siteContent.model.js";
 
-// Get all site content
+// Get all site content - optimized with lean()
 export const getAllSiteContentService = async () => {
   try {
-    const contents = await SiteContent.find().sort({ createdAt: -1 });
+    const contents = await SiteContent.find()
+      .select("section images metadata createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .lean(); // Use lean() for faster queries
     return { contents };
   } catch (error) {
     throw error;
   }
 };
 
-// Get site content by section
+// Get site content by section - optimized with lean()
 export const getSiteContentBySectionService = async (section) => {
   try {
-    const content = await SiteContent.findOne({ section });
+    const content = await SiteContent.findOne({ section })
+      .select("section images metadata createdAt updatedAt")
+      .lean(); // Use lean() for faster queries
+    
     if (!content) {
       // Return empty structure if not found
       return {
@@ -38,27 +44,32 @@ export const upsertSiteContentService = async (section, data, files) => {
     // Find existing content
     let content = await SiteContent.findOne({ section });
 
-    // Handle image uploads
+    // Handle image uploads - optimized with parallel uploads
     const uploadedImages = [];
     if (files && files.length > 0) {
-      for (const file of files) {
-        if (file && file.buffer) {
-          try {
-            const result = await new Promise((resolve, reject) => {
-              const stream = cloudinary.uploader.upload_stream(
-                { folder: `site-content/${section}` },
-                (error, result) => {
-                  if (error) reject(error);
-                  else resolve(result);
-                }
-              );
-              stream.end(file.buffer);
-            });
-            uploadedImages.push(result.secure_url);
-          } catch (err) {
-            console.error("Cloudinary upload failed:", err);
-            throw new AppError("Image upload failed", 500);
-          }
+      const validFiles = files.filter(file => file && file.buffer);
+      
+      if (validFiles.length > 0) {
+        // Parallelize image uploads for better performance
+        const uploadPromises = validFiles.map((file) => {
+          return new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: `site-content/${section}` },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            stream.end(file.buffer);
+          });
+        });
+
+        try {
+          const results = await Promise.all(uploadPromises);
+          uploadedImages.push(...results.map(result => result.secure_url));
+        } catch (err) {
+          console.error("Cloudinary upload failed:", err);
+          throw new AppError("Image upload failed", 500);
         }
       }
     }
@@ -152,18 +163,20 @@ export const deleteImageFromSiteContentService = async (
       throw new AppError("Site content not found", 404);
     }
 
-    // Extract public_id from Cloudinary URL for deletion
+    // Extract public_id from Cloudinary URL for deletion - optimized
     const imageToDelete = content.images.find((img) => img.id === imageId);
     if (imageToDelete && imageToDelete.src) {
       try {
-        // Extract public_id from Cloudinary URL
-        const urlParts = imageToDelete.src.split("/");
-        const publicIdWithExt = urlParts
-          .slice(urlParts.indexOf("site-content"))
-          .join("/")
-          .replace(/\.[^/.]+$/, ""); // Remove extension
-
-        await cloudinary.uploader.destroy(publicIdWithExt);
+        // Optimized public_id extraction from Cloudinary URL
+        const url = imageToDelete.src;
+        if (url.includes("cloudinary.com")) {
+          // Extract public_id more efficiently
+          const match = url.match(/\/v\d+\/(.+)$/);
+          if (match && match[1]) {
+            const publicId = match[1].replace(/\.[^/.]+$/, ""); // Remove extension
+            await cloudinary.uploader.destroy(publicId);
+          }
+        }
       } catch (err) {
         console.warn("Failed to delete from Cloudinary:", err);
         // Continue with database deletion even if Cloudinary deletion fails
@@ -187,22 +200,28 @@ export const deleteSiteContentService = async (section) => {
       throw new AppError("Site content not found", 404);
     }
 
-    // Delete all images from Cloudinary
-    for (const img of content.images) {
-      if (img.src) {
-        try {
-          const urlParts = img.src.split("/");
-          const publicIdWithExt = urlParts
-            .slice(urlParts.indexOf("site-content"))
-            .join("/")
-            .replace(/\.[^/.]+$/, "");
+    // Delete all images from Cloudinary - optimized with parallel deletions
+    const deletePromises = content.images
+      .filter(img => img.src && img.src.includes("cloudinary.com"))
+      .map((img) => {
+        return new Promise(async (resolve) => {
+          try {
+            // Optimized public_id extraction
+            const match = img.src.match(/\/v\d+\/(.+)$/);
+            if (match && match[1]) {
+              const publicId = match[1].replace(/\.[^/.]+$/, ""); // Remove extension
+              await cloudinary.uploader.destroy(publicId);
+            }
+            resolve();
+          } catch (err) {
+            console.warn("Failed to delete from Cloudinary:", err);
+            resolve(); // Resolve anyway to continue with other deletions
+          }
+        });
+      });
 
-          await cloudinary.uploader.destroy(publicIdWithExt);
-        } catch (err) {
-          console.warn("Failed to delete from Cloudinary:", err);
-        }
-      }
-    }
+    // Execute all deletions in parallel
+    await Promise.all(deletePromises);
 
     await SiteContent.findOneAndDelete({ section });
     return { message: "Site content deleted successfully" };

@@ -10,20 +10,26 @@ export const addProductService = async (data, files) => {
 
   let uploadedImages = [];
 
+  // Parallelize image uploads for better performance
   if (files && files.length > 0) {
-    // upload each file buffer to Cloudinary
-    for (const file of files) {
-      const result = await new Promise((resolve, reject) => {
+    const uploadPromises = files.map((file) => {
+      return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: "products" }, // optional folder in Cloudinary
+          { folder: "products" },
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
           }
         );
-        stream.end(file.buffer); // send file buffer directly
+        stream.end(file.buffer);
       });
-      uploadedImages.push(result.secure_url);
+    });
+
+    try {
+      const results = await Promise.all(uploadPromises);
+      uploadedImages = results.map((result) => result.secure_url);
+    } catch (error) {
+      throw new AppError("Image upload failed", 500);
     }
   }
 
@@ -41,19 +47,24 @@ export const addProductService = async (data, files) => {
   await newProduct.save();
   return { message: "New product added", newProduct };
 };
-// Get all product list service with pagination
+// Get all product list service with pagination - optimized with parallel queries and lean()
 export const getAllProductsService = async (page = 1, limit = 20) => {
   try {
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const products = await Product.find()
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
-    
-    const totalProducts = await Product.countDocuments();
+    // Use Promise.all to run queries in parallel for better performance
+    const [products, totalProducts] = await Promise.all([
+      Product.find()
+        .select("title images price category types sku description isPackage createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(), // Use lean() for faster queries (returns plain JS objects)
+      Product.countDocuments()
+    ]);
+
     const totalPages = Math.ceil(totalProducts / limitNum);
 
     return {
@@ -92,27 +103,31 @@ export const updateProductService = async (id, data, files) => {
     product.isPackage = isPackage === 'true' || isPackage === true;
   }
 
-  // 1) Upload new files to Cloudinary
+  // 1) Upload new files to Cloudinary in parallel for better performance
   const uploadedUrls = [];
   if (files && files.length > 0) {
-    for (const file of files) {
-      if (file && file.buffer) {
-        try {
-          const result = await new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              { folder: "products" },
-              (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-              }
-            );
-            stream.end(file.buffer);
-          });
-          uploadedUrls.push(result.secure_url);
-        } catch (err) {
-          console.error("Cloudinary upload failed for file:", file.originalname, err);
-          throw new AppError("Image upload failed", 500);
-        }
+    const validFiles = files.filter(file => file && file.buffer);
+    
+    if (validFiles.length > 0) {
+      const uploadPromises = validFiles.map((file) => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: "products" },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          stream.end(file.buffer);
+        });
+      });
+
+      try {
+        const results = await Promise.all(uploadPromises);
+        uploadedUrls.push(...results.map(result => result.secure_url));
+      } catch (err) {
+        console.error("Cloudinary upload failed:", err);
+        throw new AppError("Image upload failed", 500);
       }
     }
   }
@@ -174,22 +189,24 @@ export const deleteProductService = async (id) => {
   return { message: "Product deleted successfully" };
 };
 
-// filter by category
+// filter by category - optimized with parallel queries and fixed select syntax
 export const getProductByCategoryService = async (category, type, page = 1, limit = 20) => {
   const filter = {};
   if (category) filter.category = category;
-  if (type) filter.types = type; // now type is defined
+  if (type) filter.types = type;
 
   const skip = (page - 1) * limit;
 
-  const products = await Product.find(filter)
-    .select("title images price category types sku, description")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
-
-  const totalProducts = await Product.countDocuments(filter);
+  // Run queries in parallel for better performance
+  const [products, totalProducts] = await Promise.all([
+    Product.find(filter)
+      .select("title images price category types sku description") // Fixed: removed comma
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Product.countDocuments(filter)
+  ]);
 
   return {
     products,
@@ -204,22 +221,21 @@ export const getProductByCategoryService = async (category, type, page = 1, limi
 
 
 export const getProductsByTypeService = async (type, page = 1, limit = 20) => {
-  if (!type) throw new Error("Type is required");
+  if (!type) throw new AppError("Type is required", 400);
 
   const skip = (page - 1) * limit;
 
   try {
-    // Only fetch necessary fields (adjust as needed)
-    const products = await Product.find({ types: type })
-      .select("title images price category types sku, description") // only required fields
-      .sort({ createdAt: -1 }) // newest first
-      .skip(skip)
-      .limit(limit)
-      .lean(); // returns plain JS objects, faster than Mongoose docs
-
-    // Get total count for pagination
-    const totalProducts = await Product.countDocuments({ types: type });
-    
+    // Run queries in parallel and fix select syntax
+    const [products, totalProducts] = await Promise.all([
+      Product.find({ types: type })
+        .select("title images price category types sku description") // Fixed: removed comma
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Product.countDocuments({ types: type })
+    ]);
 
     return {
       products,
@@ -237,10 +253,10 @@ export const getProductsByTypeService = async (type, page = 1, limit = 20) => {
 
 export const getProductByIdService = async (productId) => {
   try {
-    const product = await Product.findById(productId)
+    const product = await Product.findById(productId).lean(); // Use lean() for faster queries
     return product;
   } catch (error) {
-    throw error;
+    throw new AppError("Invalid product ID", 400);
   }
 };
 
@@ -250,14 +266,17 @@ export const getProductsByPackageService = async (page = 1, limit = 20) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    const products = await Product.find({ isPackage: true })
-      .select("title images price category types sku description isPackage")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
+    // Run queries in parallel for better performance
+    const [products, totalProducts] = await Promise.all([
+      Product.find({ isPackage: true })
+        .select("title images price category types sku description isPackage")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Product.countDocuments({ isPackage: true })
+    ]);
 
-    const totalProducts = await Product.countDocuments({ isPackage: true });
     const totalPages = Math.ceil(totalProducts / limitNum);
 
     return {
@@ -270,6 +289,43 @@ export const getProductsByPackageService = async (page = 1, limit = 20) => {
         hasPrevPage: pageNum > 1,
         limit: limitNum
       }
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get product metadata (types and categories) - optimized to avoid fetching all products
+export const getProductMetadataService = async (isPackage = null) => {
+  try {
+    const filter = isPackage !== null ? { isPackage } : {};
+    
+    // Use aggregation pipeline for efficient metadata extraction
+    const metadata = await Product.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          types: { $addToSet: "$types" },
+          categories: { $addToSet: { type: "$types", category: "$category" } }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          types: { $filter: { input: "$types", as: "type", cond: { $ne: ["$$type", null] } } },
+          categories: 1
+        }
+      }
+    ]);
+
+    if (metadata.length === 0) {
+      return { types: [], categories: [] };
+    }
+
+    return {
+      types: metadata[0].types || [],
+      categories: metadata[0].categories || []
     };
   } catch (error) {
     throw error;

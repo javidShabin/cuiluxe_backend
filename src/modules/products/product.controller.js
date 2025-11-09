@@ -7,6 +7,7 @@ import {
   getProductsByPackageService,
   getProductsByTypeService,
   updateProductService,
+  getProductMetadataService,
 } from "./product.service.js";
 
 // Add product with details
@@ -107,6 +108,18 @@ export const getProductsByPackage = async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const result = await getProductsByPackageService(page, limit);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get product metadata (types and categories) - optimized endpoint
+export const getProductMetadata = async (req, res, next) => {
+  try {
+    const { isPackage } = req.query;
+    const isPackageFilter = isPackage === 'true' ? true : isPackage === 'false' ? false : null;
+    const result = await getProductMetadataService(isPackageFilter);
     res.status(200).json(result);
   } catch (error) {
     next(error);
