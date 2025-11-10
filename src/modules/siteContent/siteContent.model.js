@@ -5,7 +5,7 @@ const SiteContentSchema = new Schema(
     section: {
       type: String,
       required: true,
-      enum: ["showWork", "about", "productType", "services"],
+      enum: ["showWork", "about", "productType", "services", "hero"],
       unique: true,
       index: true, // Index for faster section lookups
     },
@@ -18,6 +18,9 @@ const SiteContentSchema = new Schema(
         gridClasses: { type: String, default: "" },
         height: { type: String, default: "" },
         order: { type: Number, default: 0, index: true }, // Index for sorting
+        headingTop: { type: String, default: "" }, // For hero slides
+        headingBottom: { type: String, default: "" }, // For hero slides
+        blurb: { type: String, default: "" }, // For hero slides
       },
     ],
     metadata: {
