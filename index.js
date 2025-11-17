@@ -13,7 +13,7 @@ const server = express();
 
 // Middlewares
 server.use(cors({
-  origin: ["https://cuiluxe-frontend.vercel.app", true],
+  origin: "https://cuiluxe-frontend.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true, // if you need cookies/auth
 }));
