@@ -13,7 +13,7 @@ const server = express();
 
 // Middlewares
 server.use(cors({
-  origin: "cuiluxe.com",
+  origin: "https://www.cuiluxe.com",
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true, // if you need cookies/auth
 }));
